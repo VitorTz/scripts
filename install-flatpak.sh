@@ -17,6 +17,7 @@ echo "==> Installing applications..."
 sudo flatpak install -y system flathub app.shizumu.Shizumu
 sudo flatpak install -y system flathub io.github.hakuneko.HakuNeko
 sudo flatpak install -y system flathub org.upscayl.Upscayl
+sudo flatpak install -y moe.kopuz.kopuz
 
 echo
 echo "==> Flatpak installation completed."
