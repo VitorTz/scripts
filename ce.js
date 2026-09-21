@@ -1,11 +1,13 @@
 // ==UserScript==
-// @name         F2 Automation & CEP Viewer
+// @name         Customizable Macro & CEP Viewer
 // @namespace    http://tampermonkey.net/
-// @version      1.0
-// @description  Press F2 to simulate Enter, Copy, Backspace, and F7 with delays. Displays CEP input value on the bottom left.
+// @version      1.2
+// @description  Customizable trigger key to simulate Enter, Copy, Backspace, and F7. Displays CEP input value.
 // @author       You
 // @match        *://*/*
 // @grant        GM_setClipboard
+// @grant        GM_setValue
+// @grant        GM_getValue
 // ==/UserScript==
 
 (function() {
@@ -13,6 +15,10 @@
 
     // Delay between each action in milliseconds
     const DELAY_MS = 150;
+    
+    // Load saved trigger key from Tampermonkey storage, default to 'Space'
+    let triggerKeyCode = GM_getValue('macroTriggerKey', 'Space');
+    let isRecordingKey = false;
 
     // Helper function to create a delay
     const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -31,7 +37,7 @@
     };
 
     // Main sequence execution
-    const executeF2Sequence = async () => {
+    const executeSequence = async () => {
         const activeEl = document.activeElement || document.body;
 
         // 1. Enter
@@ -58,7 +64,7 @@
         // Natively remove the last character if it is a text field
         if (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA') {
             activeEl.value = activeEl.value.slice(0, -1);
-            // Dispatch input event so frontend frameworks (React, Angular) detect the change
+            // Dispatch input event so frontend frameworks detect the change
             activeEl.dispatchEvent(new Event('input', { bubbles: true }));
         }
         
@@ -70,40 +76,97 @@
         dispatchKey(activeEl, 'keyup', 'F7', 'F7', 118);
     };
 
-    // Listen for the F2 key press
+    // Main Keyboard Listener
     window.addEventListener('keydown', async (e) => {
-        if (e.key === 'F2') {
-            e.preventDefault(); // Prevent default browser F2 behavior
-            await executeF2Sequence();
+        // If the user clicked the button to change the key
+        if (isRecordingKey) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            triggerKeyCode = e.code;
+            GM_setValue('macroTriggerKey', triggerKeyCode); // Save for future sessions
+            
+            keyButton.textContent = `Trigger: [ ${triggerKeyCode} ]`;
+            keyButton.style.backgroundColor = '#4CAF50';
+            isRecordingKey = false;
+            return;
+        }
+
+        // If the pressed key matches our trigger key
+        if (e.code === triggerKeyCode) {
+            // Only prevent default if we are not typing in an input (unless it's the specific behavior you want)
+            // Uncomment the next line if you want to completely block the trigger key from typing naturally
+            // e.preventDefault(); 
+            
+            await executeSequence();
         }
     });
 
-    // Create the visual UI for the CEP value
-    const cepDisplay = document.createElement('div');
-    Object.assign(cepDisplay.style, {
+    // --- UI Creation ---
+
+    // Main container
+    const uiContainer = document.createElement('div');
+    Object.assign(uiContainer.style, {
         position: 'fixed',
         bottom: '15px',
         left: '15px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '8px',
+        zIndex: '999999'
+    });
+
+    // Config Button
+    const keyButton = document.createElement('button');
+    Object.assign(keyButton.style, {
+        padding: '8px 12px',
+        backgroundColor: '#4CAF50',
+        color: '#fff',
+        border: 'none',
+        borderRadius: '6px',
+        fontFamily: 'monospace',
+        fontSize: '14px',
+        fontWeight: 'bold',
+        cursor: 'pointer',
+        boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
+        transition: 'background-color 0.2s'
+    });
+    keyButton.textContent = `Trigger: [ ${triggerKeyCode} ]`;
+    
+    keyButton.addEventListener('click', () => {
+        isRecordingKey = true;
+        keyButton.textContent = 'Press any key...';
+        keyButton.style.backgroundColor = '#ff9800'; // Orange to indicate recording state
+    });
+
+    // CEP Display
+    const cepDisplay = document.createElement('div');
+    Object.assign(cepDisplay.style, {
         padding: '10px 15px',
         backgroundColor: 'rgba(0, 0, 0, 0.85)',
         color: '#4CAF50',
         fontFamily: 'monospace',
         fontSize: '16px',
         fontWeight: 'bold',
-        borderRadius: '8px',
-        zIndex: '999999',
+        borderRadius: '6px',
         pointerEvents: 'none',
         boxShadow: '0 4px 6px rgba(0,0,0,0.3)'
     });
-    cepDisplay.textContent = 'CEP: Aguardando...';
-    document.body.appendChild(cepDisplay);
+    cepDisplay.textContent = 'CEP: Waiting...';
+
+    // Assemble UI
+    uiContainer.appendChild(keyButton);
+    uiContainer.appendChild(cepDisplay);
+    document.body.appendChild(uiContainer);
+
+    // --- CEP Observer Logic ---
 
     // Function to search for the CEP input and update the UI
     const updateCepDisplay = () => {
         // Query inputs where the title attribute contains 'cep' (case-insensitive)
         const cepInput = document.querySelector('input[title*="cep" i]');
         if (cepInput) {
-            cepDisplay.textContent = `CEP: ${cepInput.value || 'Vazio'}`;
+            cepDisplay.textContent = `CEP: ${cepInput.value || 'Empty'}`;
         }
     };
 
@@ -112,7 +175,7 @@
         if (e.target && e.target.tagName === 'INPUT') {
             const title = e.target.getAttribute('title') || '';
             if (title.toLowerCase().includes('cep')) {
-                cepDisplay.textContent = `CEP: ${e.target.value || 'Vazio'}`;
+                cepDisplay.textContent = `CEP: ${e.target.value || 'Empty'}`;
             }
         }
     });
